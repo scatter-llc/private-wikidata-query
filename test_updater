@@ -1,0 +1,25 @@
+#!/bin/bash
+# WF 2025-12-14
+# test updater script for local / private / get your own  Wikidata Query Service
+# https://github.com/WolfgangFahl/get-your-own-wdqs
+
+# run command in container
+docker_cmd() {
+  if ! docker ps | grep -q "get-your-own-wdqs-wdqs-1"; then
+    echo "Error: Container 'get-your-own-wdqs-wdqs-1' is not running."
+    exit 1
+  fi
+  
+  # "$@" passes arguments exactly as received to the container
+  docker exec -it get-your-own-wdqs-wdqs-1 "$@"
+}
+
+# get an updater batch
+get_batch() {
+  local rc_limit="$1"
+  
+  docker_cmd curl -s -H 'User-Agent: OrbUpdateBot/0.3.97-wmde.8' "https://www.wikidata.org/w/api.php?action=query&list=recentchanges&rcprop=timestamp|ids|title|user|comment|flags|sizes&rcnamespace=0|120&rclimit=${rc_limit}&format=json"
+}
+
+# get an update batch of the given size - default is 10
+get_batch "${1:-10}"

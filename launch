@@ -1,0 +1,50 @@
+#!/bin/bash
+# WF 2025-06-07
+# launch script for local / private / get your own Wikidata Query Service
+# https://github.com/WolfgangFahl/get-your-own-wdqs
+
+# Container name variables
+PROJECT_NAME="get-your-own-wdqs"
+WDQS_CONTAINER="${PROJECT_NAME}-wdqs-1"
+FRONTEND_CONTAINER="${PROJECT_NAME}-wdqs-frontend-1"
+PROXY_CONTAINER="${PROJECT_NAME}-wdqs-proxy-1"
+
+docker compose down
+BRAND_TITLE="${1:-$(hostname) Wikidata Query Service}"
+export ENABLE_UPDATE_LOOP=true
+export BRAND_TITLE="$BRAND_TITLE"
+docker compose up -d
+
+sleep 5
+docker logs "$WDQS_CONTAINER" 2>&1 | tail -3
+
+# Check environment vars in WDQS container (for update loop)
+echo "=== WDQS Container Environment ==="
+docker exec "$WDQS_CONTAINER" env | grep -E "(ENABLE_UPDATE_LOOP|UPDATER_OPTS)"
+
+# Check BRAND_TITLE in frontend container where it's actually used
+echo "=== Frontend Container Environment ==="
+docker exec "$FRONTEND_CONTAINER" env | grep "BRAND_TITLE"
+
+sleep 5
+
+# List logs directory
+docker exec "$WDQS_CONTAINER" ls -la /var/log/wdqs/
+
+# Check if update loop process is running
+docker exec "$WDQS_CONTAINER" ps aux | grep -i update
+
+# Tail update logs if they exist
+docker exec "$WDQS_CONTAINER" find /var/log -name "*update*" -type f
+
+# Check startup logs for update loop message
+docker logs "$WDQS_CONTAINER" | grep -i "update loop"
+
+# Check if runUpdateLoop.sh exists and is executable
+docker exec "$WDQS_CONTAINER" ls -la /runUpdateLoop.sh
+
+# test updater
+./test_updater 2 | jq .
+
+# finally start bash to optionally check further details
+docker exec -it "$WDQS_CONTAINER" /bin/bash

@@ -1,51 +1,74 @@
-version: '3'
+# Docker Compose configuration for Wikidata Query Service (WDQS)
+# Provides a complete WDQS stack with Blazegraph backend, proxy, and web frontend
+# Supports optional update loop for syncing with Wikidata.org via ENABLE_UPDATE_LOOP env var
 
 services:
+  # WDQS Web Frontend - User interface for querying
   wdqs-frontend:
     image: wikibase/wdqs-frontend:wmde.11
     ports:
-     - 8099:80
+     - 8099:80  # Expose frontend on localhost:8099
     depends_on:
     - wdqs-proxy
     networks:
       default:
         aliases:
-         - wdqs-frontend.svc
+         - wdqs-frontend.svc  # Internal service discovery
     environment:
-      - WIKIBASE_HOST=www.wikidata.org
-      - WDQS_HOST=wdqs-proxy.svc
-      - WDQS_PORT=80
-      - BRAND_TITLE=Private Wikidata Query
+      - WIKIBASE_HOST=www.wikidata.org  # Source Wikidata instance
+      - WDQS_HOST=wdqs-proxy.svc        # Internal proxy host
+      - WDQS_PORT=80                    # Proxy port
+      - BRAND_TITLE=${BRAND_TITLE:-Private Wikidata Query} # Configurable brand title
+
+  # WDQS Backend - Blazegraph triple store database
   wdqs:
     image: wikibase/wdqs:0.3.97-wmde.8
     volumes:
-      - ./data:/wdqs/data
-      - ./sources:/sources
-    command: /runBlazegraph.sh
+      - ./data:/wdqs/data           # Persistent data storage
+      - ./sources:/sources          # Source files directory
+      - ./runUpdateLoop.sh:/runUpdateLoop.sh:ro  # Update loop script (read-only)
+      - ./whitelist.txt:/wdqs/whitelist.txt:ro # whitelist
+    command: >
+      sh -c "
+      if [ \"$$ENABLE_UPDATE_LOOP\" = \"true\" ]; then
+        echo 'Starting WDQS with update loop enabled and activating loop';
+        /runUpdateLoop.sh -l &
+      else
+        echo 'Starting WDQS without update loop';
+      fi;
+      exec /runBlazegraph.sh"
     networks:
       default:
         aliases:
-         - wdqs.svc
+         - wdqs.svc  # Internal service discovery
     environment:
-      - WIKIBASE_HOST=www.wikidata.org
-      - WDQS_HOST=wdqs.svc
-      - WDQS_PORT=9999
-      - HEAP_SIZE=224g
-      - BLAZEGRAPH_EXTRA_OPTS=-Xms224g
+      - WIKIBASE_HOST=www.wikidata.org     # Source Wikidata instance
+      - WDQS_HOST=wdqs.svc                 # Internal service host
+      - WDQS_PORT=9999                     # Blazegraph port
+      # user agent - important!
+      # force direct JAVA option
+      - _JAVA_OPTIONS=-Dhttp.userAgent=OrbUpdateBot/0.3.97-wmde.8
+      #- UPDATER_OPTS=-Dhttp.userAgent=OrbUpdateBot/0.3.97-wmde.8 
+      - HEAP_SIZE=224g                     # JVM heap size
+      - BLAZEGRAPH_EXTRA_OPTS=-Xms224g     # Additional JVM options
+      - ENABLE_UPDATE_LOOP=${ENABLE_UPDATE_LOOP:-false}
+
     ports:
-      - "9999:9999"
+      - "9999:9999"  # Expose Blazegraph directly for debugging
+
+  # Reverse Proxy - Caddy server for WDQS backend access
   wdqs-proxy:
     image: caddy
     restart: unless-stopped
     environment:
-     - PROXY_PASS_HOST=wdqs.svc:9999
+     - PROXY_PASS_HOST=wdqs.svc:9999  # Backend target for proxying
     volumes:
-     - ./Caddyfile:/etc/caddy/Caddyfile
+     - ./Caddyfile:/etc/caddy/Caddyfile  # Caddy configuration
     expose:
-     - 80
+     - 80  # Internal port only (accessed via frontend)
     depends_on:
-    - wdqs
+    - wdqs  # Wait for backend to be ready
     networks:
       default:
         aliases:
-         - wdqs-proxy.svc
+         - wdqs-proxy.svc  # Internal service discovery

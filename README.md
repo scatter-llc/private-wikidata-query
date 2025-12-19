@@ -1,4 +1,9 @@
+[![License](https://img.shields.io/github/license/scatter-llc/private-wikidata-query.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+
 This is a minimal, Docker Compose-based setup of the Wikidata Query Service, including the Blazegraph database and the Wikidata Query Service frontend.
+
+## Example
+<img src="https://github.com/user-attachments/assets/145bd445-662d-4499-8f51-23cfef85f7cb" width="871" alt="Example Screenshot">
 
 ## Setup
 
